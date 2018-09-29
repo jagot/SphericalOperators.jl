@@ -1,0 +1,418 @@
+#+TITLE: Coupling Operators in Spherical Symmetry
+#+AUTHOR: Stefanos Carlström
+#+EMAIL: stefanos.carlstrom@gmail.com
+
+#+PROPERTY: header-args:julia :session *julia-spherical-symmetry* :eval no-export
+
+* COMMENT Setup
+  #+BEGIN_SRC julia
+    using Pkg
+    Pkg.activate(".")
+    using Test
+  #+END_SRC
+
+  #+RESULTS:
+  : nothing
+
+* Introduction
+  The interaction in both the length gauge and the velocity gauge
+  has this common form:
+  \begin{subequations}
+  \begin{align}
+  \op{V}_{\textrm{l}}(t) &= q\vec{E}(t)\cdot\vec{M}\{r,r\} = q\vec{E}(t)\cdot\vec{M}\{1,1\}r,\\
+  \op{V}_{\textrm{v}}(t) &=
+  -\im q\vec{A}(t)\cdot\vec{M}\{
+  \partial_r - \ell r^{-1},
+  \partial_r + (\ell+1) r^{-1}
+  \}\\
+  &=
+  -\im q\vec{A}(t)\cdot\vec{M}\{-\ell,\ell+1\}r^{-1}
+  -\im q\vec{A}(t)\cdot\vec{M}\{1,1\}\partial_r\nonumber\\
+  &\defd
+  \op{V}_{\textrm{v}}^{(1)}(t)+
+  \op{V}_{\textrm{v}}^{(2)}(t),\nonumber
+  \end{align}
+  \end{subequations}
+  \begin{equation}
+  \begin{aligned}
+  \label{eqn:dipole-angular-structure}
+  \vec{M}\{\mathfrak{a},\mathfrak{b}\}
+  &\defd
+  \bmat{
+  \zeta(\mathfrak{a},\mathfrak{b})&
+  \xi(\mathfrak{a},\mathfrak{b})&
+  \upsilon(\mathfrak{a},\mathfrak{b})
+  }^\top\\
+  \implies
+  \vec{A}\cdot\vec{M}\{\mathfrak{a},\mathfrak{b}\}
+  &\equiv
+  A_z\zeta(\mathfrak{a},\mathfrak{b})+
+  A_x\xi(\mathfrak{a},\mathfrak{b})+
+  A_y\upsilon(\mathfrak{a},\mathfrak{b})
+  \end{aligned}
+  \end{equation}
+  \begin{subequations}
+  \begin{align}
+  \zeta(\mathfrak{a},\mathfrak{b}) \defd&
+  +c^{\ell}_{m}
+  &&\mathfrak{a}
+  &\ketbra{\ell+1,m}{\ell, m}&\\
+  &+c^{\ell-1}_{m}
+  &&\mathfrak{b}
+  &\ketbra{\ell-1,m}{\ell, m}&\nonumber\\\nonumber\\
+  2\xi(\mathfrak{a},\mathfrak{b}) \defd&
+  +b^\ell_m
+  &&\mathfrak{a}
+  &\ketbra{\ell+1,m+1}{\ell, m}&\\
+  &-b^{\ell-1}_{-m-1}
+  &&\mathfrak{b}
+  &\ketbra{\ell-1,m+1}{\ell, m}&\nonumber\\
+  &
+  -b^\ell_{-m}
+  &&\mathfrak{a}
+  &\ketbra{\ell+1,m-1}{\ell, m}&\nonumber\\
+  &+b^{\ell-1}_{m-1}
+  &&\mathfrak{b}
+  &\ketbra{\ell-1,m-1}{\ell, m}&,\nonumber
+  \end{align}
+  \end{subequations}
+  where the angular coupling coefficients are
+  \begin{equation}
+  c^{\ell}_{m}\defd
+  \left[
+  \frac{(\ell+m+1)(\ell-m+1)}{(2\ell+3)(2\ell+1)}
+  \right]^{1/2},
+  \qquad
+  b^{\ell}_{m}\defd
+  \left[
+  \frac{(\ell+m+2)(\ell+m+1)}{(2\ell+3)(2\ell+1)}
+  \right]^{1/2}.
+  \end{equation}
+
+
+  \(\upsilon\) corresponds to polarization along \(y\),
+  i.e. longitudinal polarization, which we do not consider.
+* Spherical Basis
+  #+BEGIN_SRC julia
+    import Base: size
+
+    abstract type AbstractSphericalBasis end
+
+    size(L::AbstractSphericalBasis,i::Integer) = size(L)[i]
+
+    struct SphericalBasis2d <: AbstractSphericalBasis
+        ℓₘₐₓ::Integer
+        nᵣ::Integer
+        m::Integer
+        function SphericalBasis2d(ℓₘₐₓ::Integer, nᵣ::Integer, m=0)
+            ℓₘₐₓ < 0 && error("ℓₘₐₓ cannot be negative")
+            nᵣ < 0 && error("nᵣ cannot be negative")
+            abs(m) ≤ ℓₘₐₓ || error("No rotational symmetry supporting m=$(m) (ℓₘₐₓ = $(ℓₘₐₓ))")
+            new(ℓₘₐₓ, nᵣ, m)
+        end
+    end
+
+    size(L::SphericalBasis2d) = (L.ℓₘₐₓ+1,L.nᵣ)
+
+    struct SphericalBasis3d <: AbstractSphericalBasis
+        ℓₘₐₓ::Integer
+        nᵣ::Integer
+        function SphericalBasis3d(ℓₘₐₓ::Integer, nᵣ::Integer)
+            ℓₘₐₓ < 0 && error("ℓₘₐₓ cannot be negative")
+            nᵣ < 0 && error("nᵣ cannot be negative")
+            new(ℓₘₐₓ, nᵣ)
+        end
+    end
+
+    size(L::SphericalBasis3d) = ((L.ℓₘₐₓ+1)^2,L.nᵣ)
+
+    export SphericalBasis2d, SphericalBasis3d
+  #+END_SRC
+
+  #+RESULTS:
+  : size (generic function with 94 methods)
+** Iterators over channels
+   #+BEGIN_SRC julia
+     eachℓ(L::SB) where {SB<:AbstractSphericalBasis} = 0:L.ℓₘₐₓ
+     enumerateℓ(L::SB) where {SB<:AbstractSphericalBasis} = enumerate(eachℓ(L))
+
+     # No check is made that ℓ ≤ ℓₘₐₓ, for performance reasons
+     eachm(L::SphericalBasis2d, ℓ::Integer) = L.m:L.m
+     eachm(L::SphericalBasis3d, ℓ::Integer) = -ℓ:ℓ
+     enumeratem(L::SB, ℓ::Integer) where {SB<:AbstractSphericalBasis} = enumerate(eachm(L, ℓ))
+
+     # Since this function does not return lazy iterators, it may very well
+     # be slow and inefficient.
+     function eachℓm(L::SB) where {SB<:AbstractSphericalBasis}
+         map(eachℓ(L)) do ℓ
+             map(eachm(L, ℓ)) do m
+                 ℓ,m
+             end
+         end |> v -> reduce(vcat,v)
+     end
+     enumerateℓm(L::SB) where {SB<:AbstractSphericalBasis} = enumerate(eachℓm(L))
+   #+END_SRC
+
+   #+RESULTS:
+   : enumerateℓm (generic function with 1 method)
+** TEST Creating spherical bases
+   #+BEGIN_SRC julia
+     L2d = SphericalBasis2d(10,100)
+     L3d = SphericalBasis3d(10,100)
+
+     @test last.(enumerateℓ(L2d)) == 0:10
+     @test last.(enumeratem(L2d, 3)) == 0:0
+     @test last.(enumeratem(L3d, 3)) == -3:3
+
+     @test size(L2d,1) == 11
+     @test size(L3d,1) == 121
+     @test size(L2d,2) == 100
+     @test size(L3d,2) == 100
+
+     eL2d = enumerateℓm(L2d) 
+     eL3d = enumerateℓm(L3d)
+
+     @test last(collect(eL2d))[end] == (10,0)
+     @test last(collect(eL3d))[end] == (10,10)
+
+     @test first.(eL2d) == 1:11
+     @test first.(eL3d) == 1:121
+
+     nothing
+   #+END_SRC
+
+   #+RESULTS:
+   : nothing
+
+* Orderings
+  #+BEGIN_SRC julia
+    abstract type Ordering end
+    struct LexicalOrdering <: Ordering end
+
+    # Lexical ordering for the 2d case
+    ord(::Type{LexicalOrdering},ℓ,nᵣ,r) = ℓ*nᵣ .+ r
+
+    # Lexical ordering for the 3d case
+    ord(::Type{LexicalOrdering},ℓ,m,nᵣ,r) = (ℓ^2 + ℓ + m)*nᵣ .+ r
+  #+END_SRC
+
+  #+RESULTS:
+  : ord (generic function with 2 methods)
+
+* Spherical Tensors
+** COMMENT General coupling coefficients
+   #+BEGIN_SRC julia
+     using WignerSymbols
+
+     function C(k, ℓ, ℓ′, q=0, m=0, m′=0)
+         s = (-1)^(2ℓ-m)
+         N = √((2ℓ+1)*(2ℓ′+1))
+         W = wigner3j(ℓ, k, ℓ′,
+                      -m, q, m′)
+         Wr = wigner3j(ℓ, k, ℓ′,
+                       0, 0, 0)
+         s*N*W*Wr
+     end
+   #+END_SRC
+
+   #+RESULTS:
+   : C (generic function with 4 methods)
+
+** Coupling coefficients for dipole operators
+   #+BEGIN_SRC julia
+     c(ℓ,m) = √((ℓ+m+1)*(ℓ-m+1)/((2ℓ+3)*(2ℓ+1)))
+     b(ℓ,m) = √((ℓ+m+2)*(ℓ+m+1)/((2ℓ+3)*(2ℓ+1)))
+   #+END_SRC
+
+   #+RESULTS:
+   : b (generic function with 1 method)
+
+* Dipole Operators
+** Dipole Stencils
+   #+BEGIN_SRC julia
+     abstract type MultipoleStencil end
+
+     struct DipoleStencil <: MultipoleStencil
+         exprs::Vector{Pair{Tuple, Function}}
+     end
+   #+END_SRC
+
+   #+RESULTS:
+   : nothing
+
+   #+BEGIN_SRC julia
+     macro dipole_stencil(exprs, name)
+         # Turn the DSL statements into Expr:s that can be eval:ed later in
+         # the context of the materialize! arguments.
+         ds = map(filter(e -> typeof(e) == Expr, exprs.args[2].args)) do e
+             coords = eval(e.args[1])
+             expr = e.args[2]
+             coords => eval(Expr(:(->), :(ℓ, m, 𝔞, 𝔟), expr))
+         end |> DipoleStencil
+         quote
+             $(esc(name)) = $ds
+         end
+     end
+   #+END_SRC
+
+   #+RESULTS:
+   : @dipole_stencil (macro with 1 method)
+
+*** \(\zeta\)
+    #+BEGIN_SRC julia :results verbatim
+      @dipole_stencil(ζ) do
+          (+1,0) -> c(ℓ,m)*𝔞(ℓ)
+          (-1,0) -> c(ℓ-1,m)*𝔟(ℓ)
+      end
+      nothing
+    #+END_SRC
+
+    #+RESULTS:
+    : nothing
+
+*** \(\xi\)
+    #+BEGIN_SRC julia :results verbatim
+      @dipole_stencil(ξ) do
+          (+1,+1) -> b(ℓ,m)*𝔞(ℓ)
+          (-1,+1) -> -b(ℓ-1,-m-1)*𝔟(ℓ)
+          (+1,-1) -> -b(ℓ,-m)*𝔞(ℓ)
+          (-1,-1) -> b(ℓ-1,m-1)*𝔟(ℓ)
+      end
+      nothing
+    #+END_SRC
+
+    #+RESULTS:
+    : nothing
+
+**** \(\xi^+\)
+     #+BEGIN_SRC julia :results verbatim
+       @dipole_stencil(ξ⁺) do
+           (+1,+1) -> b(ℓ,m)*𝔞(ℓ)
+           (-1,-1) -> b(ℓ-1,m-1)*𝔟(ℓ)
+       end
+       nothing
+     #+END_SRC
+
+     #+RESULTS:
+     : nothing
+
+**** \(\xi^-\)
+     #+BEGIN_SRC julia :results verbatim
+       @dipole_stencil(ξ⁻) do
+           (-1,+1) -> -b(ℓ-1,-m-1)*𝔟(ℓ)
+           (+1,-1) -> -b(ℓ,-m)*𝔞(ℓ)
+       end
+       nothing
+     #+END_SRC
+
+     #+RESULTS:
+     : nothing
+
+** Materialize stencils
+   #+BEGIN_SRC julia
+     function materialize!(op, stencil::DipoleStencil, L::SphericalBasis2d,
+                           𝔞::Function, 𝔟::Function,
+                           ::Type{O} = LexicalOrdering) where {O<:Ordering}
+         prod(size(op)) == prod(size(L))^2 || throw(DimensionMismatch("materialize!"))
+         exprs = map(stencil.exprs) do (coords,expr)
+             coords[2] != 0 && error("SphericalBasis2d cannot materialize operators that do not conserve m")
+             coords => eval(expr)
+         end
+         op .= 0
+         rsel = 1:L.nᵣ
+         for (i,ℓ) in enumerateℓ(L)
+             for (coords,e) in exprs
+                 ℓ′ = ℓ+coords[1]
+                 ℓ′ ∉ eachℓ(L) && continue
+                 op[ord(O,ℓ,L.nᵣ,rsel),ord(O,ℓ′,L.nᵣ,rsel)] += e(ℓ,L.m,𝔞,𝔟)
+             end
+         end
+         op
+     end
+
+     function materialize!(op, stencil::DipoleStencil, L::SphericalBasis3d,
+                           𝔞::Function, 𝔟::Function,
+                           ::Type{O} = LexicalOrdering) where {O<:Ordering}
+         prod(size(op)) == prod(size(L))^2 || throw(DimensionMismatch("materialize!"))
+         exprs = map(stencil.exprs) do (coords,expr)
+             coords => eval(expr)
+         end
+         op .= 0
+         rsel = 1:L.nᵣ
+         for (i,ℓ) in enumerateℓ(L)
+             for (coords,e) in exprs
+                 ℓ′ = ℓ + coords[1]
+                 ℓ′ ∉ eachℓ(L) && continue
+                 for (j,m) in enumeratem(L,ℓ)
+                     m′ = m + coords[2]
+                     m′ ∉ eachm(L, ℓ′) && continue
+                     op[ord(O,ℓ,m,L.nᵣ,rsel),ord(O,ℓ′,m′,L.nᵣ,rsel)] += e(ℓ,m,𝔞,𝔟)
+                 end
+             end
+         end
+         op
+     end
+
+     export materialize!
+   #+END_SRC
+
+   #+RESULTS:
+   : materialize! (generic function with 4 methods)
+
+*** TEST Materialization
+    #+BEGIN_SRC julia
+      using SparseArrays
+
+      ℓₘₐₓ = 5
+      nᵣ = 10
+
+      L2d = SphericalBasis2d(ℓₘₐₓ,nᵣ)
+      L3d = SphericalBasis3d(ℓₘₐₓ,nᵣ)
+
+      N2d = prod(size(L2d))
+      N3d = prod(size(L3d))
+
+      z2d = spzeros(N2d,N2d);
+      z3d = spzeros(N3d,N3d);
+      x3d = spzeros(N3d,N3d);
+      x⁺3d = spzeros(N3d,N3d);
+      x⁻3d = spzeros(N3d,N3d);
+
+      r = ℓ -> spdiagm(0 => ones(nᵣ))
+
+      materialize!(z2d, ζ, L2d, r, r);
+      materialize!(z3d, ζ, L3d, r, r);
+      materialize!(x3d, ξ, L3d, r, r);
+      materialize!(x⁺3d, ξ⁺, L3d, r, r);
+      materialize!(x⁻3d, ξ⁻, L3d, r, r);
+
+      @test_throws ErrorException materialize!(z2d, ξ, L2d, r, r)
+
+      # using PyPlot
+      # figure("dip", figsize=(10,3))
+      # clf()
+      # subplot(231)
+      # spy(z2d)
+      # margins(0,0)
+      # subplot(232)
+      # spy(z3d)
+      # margins(0,0)
+      # subplot(234)
+      # spy(x3d)
+      # margins(0,0)
+      # subplot(235)
+      # spy(x⁺3d)
+      # margins(0,0)
+      # subplot(236)
+      # spy(x⁻3d)
+      # margins(0,0)
+      # tight_layout()
+    #+END_SRC
+
+    #+RESULTS:
+    : nothing
+
+* LaTeX config                                                     :noexport:
+  #+LATEX_HEADER: \renewcommand{\vec}[1]{\mathbf{#1}}
+  #+LATEX_HEADER: \renewcommand{\op}[1]{\mathcal{#1}}
+  #+LATEX_HEADER: \renewcommand{\defd}{\overset{!}{=}}

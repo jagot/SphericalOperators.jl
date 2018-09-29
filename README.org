@@ -1,0 +1,14 @@
+#+TITLE: SphericalOperators.jl
+#+AUTHOR: Stefanos Carlström
+#+EMAIL: stefanos.carlstrom@gmail.com
+
+[[https://travis-ci.org/jagot/SphericalOperators.jl][https://travis-ci.org/jagot/SphericalOperators.jl.svg?branch=master]]
+[[https://coveralls.io/github/jagot/SphericalOperators.jl?branch=master][https://coveralls.io/repos/github/jagot/SphericalOperators.jl/badge.svg?branch=master]]
+[[http://codecov.io/gh/jagot/SphericalOperators.jl][http://codecov.io/gh/jagot/SphericalOperators.jl/branch/master/graph/badge.svg]]
+
+#+PROPERTY: header-args:julia :session *julia-README*
+
+A small library that aids in setting up spherical tensors, regardless
+of the basis used for the radial component.
+
+This is a [[https://github.com/jagot/LiterateOrg.jl][LiterateOrg.jl]] project. The documentation is found [[file:src/SphericalOperators.org][within the code]].
