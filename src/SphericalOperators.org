@@ -151,6 +151,10 @@
          end |> v -> reduce(vcat,v)
      end
      enumerateℓm(L::SB) where {SB<:AbstractSphericalBasis} = enumerate(eachℓm(L))
+
+     export eachℓ, enumerateℓ,
+         eachm, enumeratem,
+         eachℓm, enumerateℓm
    #+END_SRC
 
    #+RESULTS:
@@ -379,6 +383,8 @@
       x⁻3d = spzeros(N3d,N3d);
 
       r = ℓ -> spdiagm(0 => ones(nᵣ))
+
+      import SphericalOperators: ζ, ζ, ξ, ξ⁺, ξ⁻
 
       materialize!(z2d, ζ, L2d, r, r);
       materialize!(z3d, ζ, L3d, r, r);
