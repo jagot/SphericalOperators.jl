@@ -153,7 +153,7 @@
 
     size(L::AbstractSphericalBasis) = (nopws(L,L.ℓₘₐₓ),L.nᵣ)
 
-    export SphericalBasis2d, SphericalBasis3d, nopws
+    export AbstractSphericalBasis, SphericalBasis2d, SphericalBasis3d, nopws
   #+END_SRC
 
   #+RESULTS:
@@ -325,7 +325,7 @@
 
    #+RESULTS:
    : nothing
-*** EXAMPLE
+*** EXAMPLE Visualization
     #+BEGIN_SRC julia :exports both :results output
       for L ∈ [SphericalBasis2d(10,100),
                SphericalBasis2d(10,100,ℓₘᵢₙ=8,m=1),
@@ -705,7 +705,6 @@
 
      #+RESULTS:
      : nothing
-
 
 * LaTeX config                                                     :noexport:
   #+LATEX_HEADER: \renewcommand{\vec}[1]{\mathbf{#1}}
