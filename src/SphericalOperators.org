@@ -94,6 +94,7 @@
   i.e. longitudinal polarization, which we do not consider.
 * Spherical Basis
   #+BEGIN_SRC julia
+    using Printf
     import Base: size
 
     abstract type AbstractSphericalBasis end
@@ -101,44 +102,113 @@
     size(L::AbstractSphericalBasis,i::Integer) = size(L)[i]
 
     struct SphericalBasis2d <: AbstractSphericalBasis
+        ℓₘᵢₙ::Integer
         ℓₘₐₓ::Integer
         nᵣ::Integer
         m::Integer
-        function SphericalBasis2d(ℓₘₐₓ::Integer, nᵣ::Integer, m=0)
-            ℓₘₐₓ < 0 && error("ℓₘₐₓ cannot be negative")
-            nᵣ < 0 && error("nᵣ cannot be negative")
-            abs(m) ≤ ℓₘₐₓ || error("No rotational symmetry supporting m=$(m) (ℓₘₐₓ = $(ℓₘₐₓ))")
-            new(ℓₘₐₓ, nᵣ, m)
+        function SphericalBasis2d(ℓₘₐₓ::Integer, nᵣ::Integer; m::Integer=0, ℓₘᵢₙ::Integer=m)
+            @assert ℓₘᵢₙ ≥ 0
+            @assert ℓₘₐₓ ≥ ℓₘᵢₙ
+            @assert abs(m) ≤ ℓₘₐₓ
+            @assert nᵣ > 0
+            # If m is conserved, there is no way of reaching an ℓ <
+            # abs(m). We therefore truncate the basis.
+            if ℓₘᵢₙ < abs(m)
+                ℓₘᵢₙ = abs(m)
+                @printf("Warning: ℓₘᵢₙ = %i is not reachable when starting in m = %i, when m is conserved. Truncating.\n",
+                        ℓₘᵢₙ, m)
+            end
+            new(ℓₘᵢₙ, ℓₘₐₓ, nᵣ, m)
         end
     end
 
-    size(L::SphericalBasis2d) = (L.ℓₘₐₓ+1,L.nᵣ)
+    """
+        nopws(L[, ℓ=L.ℓₘₐₓ])
+
+    Returns how many partial waves ∈ [L.ℓₘᵢₙ,ℓ] are present in L.
+    """
+    nopws(L::SphericalBasis2d, ℓ::Integer=L.ℓₘₐₓ) = ℓ - L.ℓₘᵢₙ + 1
 
     struct SphericalBasis3d <: AbstractSphericalBasis
+        ℓₘᵢₙ::Integer
         ℓₘₐₓ::Integer
+        mₘₐₓ::Integer
         nᵣ::Integer
-        function SphericalBasis3d(ℓₘₐₓ::Integer, nᵣ::Integer)
-            ℓₘₐₓ < 0 && error("ℓₘₐₓ cannot be negative")
-            nᵣ < 0 && error("nᵣ cannot be negative")
-            new(ℓₘₐₓ, nᵣ)
+        function SphericalBasis3d(ℓₘₐₓ::Integer, nᵣ::Integer; ℓₘᵢₙ::Integer=0, mₘₐₓ::Integer=ℓₘₐₓ)
+            @assert ℓₘᵢₙ ≥ 0
+            @assert ℓₘₐₓ ≥ ℓₘᵢₙ
+            @assert mₘₐₓ ∈ 0:ℓₘₐₓ
+            @assert nᵣ > 0
+            new(ℓₘᵢₙ, ℓₘₐₓ, mₘₐₓ, nᵣ)
         end
     end
 
-    size(L::SphericalBasis3d) = ((L.ℓₘₐₓ+1)^2,L.nᵣ)
+    function nopws(L::SphericalBasis3d, ℓ::Integer=L.ℓₘₐₓ)
+        if ℓ > L.mₘₐₓ
+            nopws(L, L.mₘₐₓ) + (ℓ-L.mₘₐₓ)*(2L.mₘₐₓ+1)
+        else
+            (ℓ+1)^2 - L.ℓₘᵢₙ^2
+        end
+    end
 
-    export SphericalBasis2d, SphericalBasis3d
+    size(L::AbstractSphericalBasis) = (nopws(L,L.ℓₘₐₓ),L.nᵣ)
+
+    export SphericalBasis2d, SphericalBasis3d, nopws
   #+END_SRC
 
   #+RESULTS:
-  : size (generic function with 94 methods)
+  : nothing
+*** TEST Creating spherical bases
+    #+BEGIN_SRC julia
+      L2d = SphericalBasis2d(10,100)
+      L2dtrunc = SphericalBasis2d(10,100,ℓₘᵢₙ=8,m=1)
+      L2dtrunc2 = SphericalBasis2d(10,100,m=7)
+      L3d = SphericalBasis3d(10,100)
+      L3dtruncm = SphericalBasis3d(10,100,mₘₐₓ=4)
+
+      @test size(L2d,1) == 11
+      @test size(L3d,1) == 121
+      @test size(L2d,2) == 100
+      @test size(L3d,2) == 100
+      @test size(L2dtrunc2,1) == 4
+      @test size(L3dtruncm,1) == 25+54
+      nothing
+    #+END_SRC
+
+    #+RESULTS:
+    : nothing
+**** TEST Assert sensible input
+     #+BEGIN_SRC julia
+       @test_throws AssertionError SphericalBasis2d(0, 10; ℓₘᵢₙ=-3)
+       @test_throws AssertionError SphericalBasis2d(-1, 10)
+       @test_throws AssertionError SphericalBasis2d(1, 10; ℓₘᵢₙ=2)
+       @test_throws AssertionError SphericalBasis2d(1, 10; m=2)
+       @test_throws AssertionError SphericalBasis2d(1, -10)
+
+       @test_throws AssertionError SphericalBasis3d(0, 10; ℓₘᵢₙ=-3)
+       @test_throws AssertionError SphericalBasis3d(-1, 10)
+       @test_throws AssertionError SphericalBasis3d(1, 10; ℓₘᵢₙ=2)
+       @test_throws AssertionError SphericalBasis3d(1, -10)
+       @test_throws AssertionError SphericalBasis3d(3, 10; mₘₐₓ=-1)
+       @test_throws AssertionError SphericalBasis3d(3, 10; mₘₐₓ=4)
+
+       nothing
+     #+END_SRC
+
+     #+RESULTS:
+     : nothing
+
 ** Iterators over channels
    #+BEGIN_SRC julia
-     eachℓ(L::SB) where {SB<:AbstractSphericalBasis} = 0:L.ℓₘₐₓ
+     eachℓ(L::SB) where {SB<:AbstractSphericalBasis} = L.ℓₘᵢₙ:L.ℓₘₐₓ
      enumerateℓ(L::SB) where {SB<:AbstractSphericalBasis} = enumerate(eachℓ(L))
 
-     # No check is made that ℓ ≤ ℓₘₐₓ, for performance reasons
+     # No check is made that ℓ ∈ 0:ℓₘₐₓ, for performance reasons
      eachm(L::SphericalBasis2d, ℓ::Integer) = L.m:L.m
-     eachm(L::SphericalBasis3d, ℓ::Integer) = -ℓ:ℓ
+     function eachm(L::SphericalBasis3d, ℓ::Integer)
+         mₘₐₓ = min(ℓ,L.mₘₐₓ)
+         -mₘₐₓ:mₘₐₓ
+     end
      enumeratem(L::SB, ℓ::Integer) where {SB<:AbstractSphericalBasis} = enumerate(eachm(L, ℓ))
 
      # Since this function does not return lazy iterators, it may very well
@@ -158,35 +228,180 @@
    #+END_SRC
 
    #+RESULTS:
-   : enumerateℓm (generic function with 1 method)
-** TEST Creating spherical bases
+   : nothing
+*** TEST Iterating over spherical bases
+    #+BEGIN_SRC julia
+      L2d = SphericalBasis2d(10,100)
+      L2dtrunc = SphericalBasis2d(10,100,ℓₘᵢₙ=8,m=1)
+      L2dtrunc2 = SphericalBasis2d(10,100,m=7)
+      L3d = SphericalBasis3d(10,100)
+      L3dtruncm = SphericalBasis3d(10,100,mₘₐₓ=4)
+
+      for ℓ ∈ 0:4
+          @test eachm(L3dtruncm, ℓ) == -ℓ:ℓ
+      end
+      for ℓ ∈ 5:10
+          @test eachm(L3dtruncm, ℓ) == -4:4
+      end
+
+      @test last.(enumerateℓ(L2d)) == 0:10
+      @test last.(enumeratem(L2d, 3)) == 0:0
+      @test last.(enumeratem(L3d, 3)) == -3:3
+      @test last.(enumerateℓ(L2dtrunc)) == 8:10
+      @test last.(enumeratem(L2dtrunc, 3)) == 1:1
+
+      eL2d = enumerateℓm(L2d)
+      eL3d = enumerateℓm(L3d)
+
+      @test last(collect(eL2d))[end] == (10,0)
+      @test last(collect(eL3d))[end] == (10,10)
+
+      @test first.(eL2d) == 1:11
+      @test first.(eL3d) == 1:121
+
+      nothing
+    #+END_SRC
+
+    #+RESULTS:
+    : nothing
+
+** Pretty printing
    #+BEGIN_SRC julia
-     L2d = SphericalBasis2d(10,100)
-     L3d = SphericalBasis3d(10,100)
+     spectroscopic = "spdfghiklmnoqrtuv"
+     spectroscopic_label(ℓ) =
+         ℓ + 1 ≤ length(spectroscopic) ? spectroscopic[ℓ+1] : "$(ℓ)"
 
-     @test last.(enumerateℓ(L2d)) == 0:10
-     @test last.(enumeratem(L2d, 3)) == 0:0
-     @test last.(enumeratem(L3d, 3)) == -3:3
+     function Base.show(io::IO, L::SphericalBasis2d)
+         ℓₘᵢₙ = spectroscopic_label(L.ℓₘᵢₙ)
+         ℓₘₐₓ = spectroscopic_label(L.ℓₘₐₓ)
+         nℓ = L.ℓₘₐₓ - L.ℓₘᵢₙ + 1
 
-     @test size(L2d,1) == 11
-     @test size(L3d,1) == 121
-     @test size(L2d,2) == 100
-     @test size(L3d,2) == 100
+         print("SphericalBasis2d(ℓ ∈ $(ℓₘᵢₙ):$(ℓₘₐₓ) = $(nℓ) channels")
+         if L.m != 0
+             print(", m = $(L.m)")
+         end
+         print(", nᵣ = $(L.nᵣ))")
+     end
 
-     eL2d = enumerateℓm(L2d) 
-     eL3d = enumerateℓm(L3d)
+     function Base.show(io::IO, L::SphericalBasis3d)
+         ℓₘᵢₙ = spectroscopic_label(L.ℓₘᵢₙ)
+         ℓₘₐₓ = spectroscopic_label(L.ℓₘₐₓ)
+         nℓ = L.ℓₘₐₓ - L.ℓₘᵢₙ + 1
 
-     @test last(collect(eL2d))[end] == (10,0)
-     @test last(collect(eL3d))[end] == (10,10)
+         print("SphericalBasis2d(ℓ ∈ $(ℓₘᵢₙ):$(ℓₘₐₓ) = $(nℓ) channels")
+         if L.mₘₐₓ < L.ℓₘₐₓ
+             print(", mₘₐₓ = $(L.mₘₐₓ)")
+         end
+         print(" = $(nopws(L)) partial waves")
+         print(", nᵣ = $(L.nᵣ))")
+     end
 
-     @test first.(eL2d) == 1:11
-     @test first.(eL3d) == 1:121
+     print_formatted(fmt, args...) = @eval @printf($fmt, $(args...))
 
-     nothing
+     function visualize(L::SphericalBasis2d)
+         ns = length(spectroscopic_label(L.ℓₘₐₓ))
+         for ℓ ∈ eachℓ(L)
+             print_formatted("%$(ns)s .\n", spectroscopic_label(ℓ))
+         end
+     end
+
+     function visualize(L::SphericalBasis3d)
+         ns = length(spectroscopic_label(L.ℓₘₐₓ))
+         for ℓ ∈ eachℓ(L)
+             print_formatted("%$(ns)s ", spectroscopic_label(ℓ))
+             mₘₐₓ = min(ℓ,L.mₘₐₓ)
+             for m ∈ -L.mₘₐₓ:-mₘₐₓ-1
+                 print(" ")
+             end
+             for m ∈ -mₘₐₓ:mₘₐₓ
+                 print(".")
+             end
+             println()
+         end
+     end
+
+     export visualize
    #+END_SRC
 
    #+RESULTS:
    : nothing
+*** EXAMPLE
+    #+BEGIN_SRC julia :exports both :results output
+      for L ∈ [SphericalBasis2d(10,100),
+               SphericalBasis2d(10,100,ℓₘᵢₙ=8,m=1),
+               SphericalBasis2d(10,100,m=7),
+               SphericalBasis3d(10,100),
+               SphericalBasis3d(10,100,mₘₐₓ=4),
+               SphericalBasis3d(10,100,ℓₘᵢₙ=2,mₘₐₓ=4)]
+          println(L)
+          visualize(L)
+          println()
+      end
+    #+END_SRC
+
+    #+RESULTS:
+    #+begin_example
+    SphericalBasis2d(ℓ ∈ s:n = 11 channels, nᵣ = 100)
+    s .
+    p .
+    d .
+    f .
+    g .
+    h .
+    i .
+    k .
+    l .
+    m .
+    n .
+
+    SphericalBasis2d(ℓ ∈ l:n = 3 channels, m = 1, nᵣ = 100)
+    l .
+    m .
+    n .
+
+    SphericalBasis2d(ℓ ∈ k:n = 4 channels, m = 7, nᵣ = 100)
+    k .
+    l .
+    m .
+    n .
+
+    SphericalBasis2d(ℓ ∈ s:n = 11 channels = 121 partial waves, nᵣ = 100)
+    s           .
+    p          ...
+    d         .....
+    f        .......
+    g       .........
+    h      ...........
+    i     .............
+    k    ...............
+    l   .................
+    m  ...................
+    n .....................
+
+    SphericalBasis2d(ℓ ∈ s:n = 11 channels, mₘₐₓ = 4 = 79 partial waves, nᵣ = 100)
+    s     .
+    p    ...
+    d   .....
+    f  .......
+    g .........
+    h .........
+    i .........
+    k .........
+    l .........
+    m .........
+    n .........
+
+    SphericalBasis2d(ℓ ∈ d:n = 9 channels, mₘₐₓ = 4 = 75 partial waves, nᵣ = 100)
+    d   .....
+    f  .......
+    g .........
+    h .........
+    i .........
+    k .........
+    l .........
+    m .........
+    n .........
+    #+end_example
 
 * Orderings
   #+BEGIN_SRC julia
@@ -194,14 +409,63 @@
     struct LexicalOrdering <: Ordering end
 
     # Lexical ordering for the 2d case
-    ord(::Type{LexicalOrdering},ℓ,nᵣ,r) = ℓ*nᵣ .+ r
+    ord(L::SphericalBasis2d,::Type{LexicalOrdering},ℓ,r) = nopws(L,ℓ-1)*L.nᵣ .+ r
 
     # Lexical ordering for the 3d case
-    ord(::Type{LexicalOrdering},ℓ,m,nᵣ,r) = (ℓ^2 + ℓ + m)*nᵣ .+ r
+    ord(L::SphericalBasis3d,::Type{LexicalOrdering},ℓ,m,r) = (nopws(L,ℓ-1) + min(ℓ,L.mₘₐₓ) + m)*L.nᵣ .+ r
   #+END_SRC
 
   #+RESULTS:
   : ord (generic function with 2 methods)
+
+** TEST Lexical ordering
+   #+BEGIN_SRC julia
+     import SphericalOperators: ord, LexicalOrdering
+
+     L2d = SphericalBasis2d(10,100)
+     @test ord(L2d, LexicalOrdering, 0, 3:5) == 3:5
+     @test ord(L2d, LexicalOrdering, 5, 3:5) == 503:505
+
+     L2dtrunc = SphericalBasis2d(10,100,ℓₘᵢₙ=8,m=1)
+     @test ord(L2dtrunc, LexicalOrdering, 8, 3:5) == 3:5
+     @test ord(L2dtrunc, LexicalOrdering, 9, 3:5) == 103:105
+
+     L2dtrunc2 = SphericalBasis2d(10,100,m=7)
+     @test ord(L2dtrunc2, LexicalOrdering, 8, 3:5) == 103:105
+     @test ord(L2dtrunc2, LexicalOrdering, 9, 3:5) == 203:205
+
+     L3d = SphericalBasis3d(10,100)
+     for (ℓ,m) ∈ eachℓm(L3d)
+         @test ord(L3d, LexicalOrdering, ℓ, m, 3:5) == (ℓ^2 + ℓ + m)*L3d.nᵣ .+ (3:5)
+     end
+
+     L3dtruncm = SphericalBasis3d(10,100,mₘₐₓ=4)
+     for ℓ ∈ 0:4
+         for m ∈ eachm(L3dtruncm, ℓ)
+             @test ord(L3dtruncm, LexicalOrdering, ℓ, m, 3:5) == (ℓ^2 + ℓ + m)*L3dtruncm.nᵣ .+ (3:5)
+         end
+     end
+     for ℓ ∈ 5:L3dtruncm.ℓₘₐₓ
+         for m ∈ eachm(L3dtruncm, ℓ)
+             @test ord(L3dtruncm, LexicalOrdering, ℓ, m, 3:5) == (5^2 + 9*(ℓ - 5) + 4 + m)*L3dtruncm.nᵣ .+ (3:5)
+         end
+     end
+
+     L3dtruncℓm = SphericalBasis3d(10,100,ℓₘᵢₙ=3,mₘₐₓ=4)
+     for ℓ ∈ 3:4
+         for m ∈ eachm(L3dtruncℓm, ℓ)
+             @test ord(L3dtruncℓm, LexicalOrdering, ℓ, m, 3:5) == (ℓ^2 - 9 + ℓ + m)*L3dtruncℓm.nᵣ .+ (3:5)
+         end
+     end
+     for ℓ ∈ 5:L3dtruncℓm.ℓₘₐₓ
+         for m ∈ eachm(L3dtruncℓm, ℓ)
+             @test ord(L3dtruncℓm, LexicalOrdering, ℓ, m, 3:5) == (5^2 + 9*(ℓ - 5) - 9 + 4 + m)*L3dtruncℓm.nᵣ .+ (3:5)
+         end
+     end
+   #+END_SRC
+
+   #+RESULTS:
+   : nothing
 
 * Spherical Tensors
 ** COMMENT General coupling coefficients
@@ -328,7 +592,7 @@
              for (coords,e) in exprs
                  ℓ′ = ℓ+coords[1]
                  ℓ′ ∉ eachℓ(L) && continue
-                 op[ord(O,ℓ,L.nᵣ,rsel),ord(O,ℓ′,L.nᵣ,rsel)] += e(ℓ,L.m,𝔞,𝔟)
+                 op[ord(L,O,ℓ,rsel),ord(L,O,ℓ′,rsel)] += e(ℓ,L.m,𝔞,𝔟)
              end
          end
          op
@@ -350,7 +614,7 @@
                  for (j,m) in enumeratem(L,ℓ)
                      m′ = m + coords[2]
                      m′ ∉ eachm(L, ℓ′) && continue
-                     op[ord(O,ℓ,m,L.nᵣ,rsel),ord(O,ℓ′,m′,L.nᵣ,rsel)] += e(ℓ,m,𝔞,𝔟)
+                     op[ord(L,O,ℓ,m,rsel),ord(L,O,ℓ′,m′,rsel)] += e(ℓ,m,𝔞,𝔟)
                  end
              end
          end
@@ -361,7 +625,7 @@
    #+END_SRC
 
    #+RESULTS:
-   : materialize! (generic function with 4 methods)
+   : nothing
 
 *** TEST Materialization
     #+BEGIN_SRC julia
@@ -372,15 +636,19 @@
 
       L2d = SphericalBasis2d(ℓₘₐₓ,nᵣ)
       L3d = SphericalBasis3d(ℓₘₐₓ,nᵣ)
+      L3dtruncm = SphericalBasis3d(ℓₘₐₓ,nᵣ,mₘₐₓ=3)
 
       N2d = prod(size(L2d))
       N3d = prod(size(L3d))
+      N3dtruncm = prod(size(L3dtruncm))
 
       z2d = spzeros(N2d,N2d);
       z3d = spzeros(N3d,N3d);
       x3d = spzeros(N3d,N3d);
       x⁺3d = spzeros(N3d,N3d);
       x⁻3d = spzeros(N3d,N3d);
+      z3dtruncm = spzeros(N3dtruncm,N3dtruncm);
+      x3dtruncm = spzeros(N3dtruncm,N3dtruncm);
 
       r = ℓ -> spdiagm(0 => ones(nᵣ))
 
@@ -391,32 +659,53 @@
       materialize!(x3d, ξ, L3d, r, r);
       materialize!(x⁺3d, ξ⁺, L3d, r, r);
       materialize!(x⁻3d, ξ⁻, L3d, r, r);
+      materialize!(z3dtruncm, ζ, L3dtruncm, r, r);
+      materialize!(x3dtruncm, ξ, L3dtruncm, r, r);
 
       @test_throws ErrorException materialize!(z2d, ξ, L2d, r, r)
-
-      # using PyPlot
-      # figure("dip", figsize=(10,3))
-      # clf()
-      # subplot(231)
-      # spy(z2d)
-      # margins(0,0)
-      # subplot(232)
-      # spy(z3d)
-      # margins(0,0)
-      # subplot(234)
-      # spy(x3d)
-      # margins(0,0)
-      # subplot(235)
-      # spy(x⁺3d)
-      # margins(0,0)
-      # subplot(236)
-      # spy(x⁻3d)
-      # margins(0,0)
-      # tight_layout()
+      @test_throws DimensionMismatch materialize!(z2d, ζ, L3d, r, r)
+      nothing
     #+END_SRC
 
     #+RESULTS:
     : nothing
+
+**** EXAMPLE Plot
+     #+BEGIN_SRC julia
+       using PyPlot
+       figure("dip", figsize=(10,3))
+       clf()
+       subplot(231)
+       spy(Array(z2d))
+       margins(0,0)
+       subplot(232)
+       spy(Array(z3d))
+       margins(0,0)
+       subplot(234)
+       spy(Array(x3d))
+       margins(0,0)
+       subplot(235)
+       spy(Array(x⁺3d))
+       margins(0,0)
+       subplot(236)
+       spy(Array(x⁻3d))
+       margins(0,0)
+       tight_layout()
+
+       figure("trunc")
+       clf()
+       subplot(121)
+       spy(Array(z3dtruncm))
+       margins(0,0)
+       subplot(122)
+       spy(Array(x3dtruncm))
+       margins(0,0)
+       tight_layout()
+     #+END_SRC
+
+     #+RESULTS:
+     : nothing
+
 
 * LaTeX config                                                     :noexport:
   #+LATEX_HEADER: \renewcommand{\vec}[1]{\mathbf{#1}}
