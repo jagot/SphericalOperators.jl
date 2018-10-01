@@ -410,6 +410,7 @@
 
     # Lexical ordering for the 2d case
     ord(L::SphericalBasis2d,::Type{LexicalOrdering},ℓ,r) = nopws(L,ℓ-1)*L.nᵣ .+ r
+    ord(L::SphericalBasis2d,::Type{LexicalOrdering},ℓ,m,r) = nopws(L,ℓ-1)*L.nᵣ .+ r
 
     # Lexical ordering for the 3d case
     ord(L::SphericalBasis3d,::Type{LexicalOrdering},ℓ,m,r) = (nopws(L,ℓ-1) + min(ℓ,L.mₘₐₓ) + m)*L.nᵣ .+ r
@@ -588,7 +589,7 @@
          end
          op .= 0
          rsel = 1:L.nᵣ
-         for (i,ℓ) in enumerateℓ(L)
+         for ℓ in eachℓ(L)
              for (coords,e) in exprs
                  ℓ′ = ℓ+coords[1]
                  ℓ′ ∉ eachℓ(L) && continue
@@ -607,11 +608,11 @@
          end
          op .= 0
          rsel = 1:L.nᵣ
-         for (i,ℓ) in enumerateℓ(L)
+         for ℓ in eachℓ(L)
              for (coords,e) in exprs
                  ℓ′ = ℓ + coords[1]
                  ℓ′ ∉ eachℓ(L) && continue
-                 for (j,m) in enumeratem(L,ℓ)
+                 for m in eachm(L,ℓ)
                      m′ = m + coords[2]
                      m′ ∉ eachm(L, ℓ′) && continue
                      op[ord(L,O,ℓ,m,rsel),ord(L,O,ℓ′,m′,rsel)] += e(ℓ,m,𝔞,𝔟)
