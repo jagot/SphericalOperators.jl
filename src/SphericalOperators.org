@@ -630,6 +630,7 @@
 *** TEST Materialization
     #+BEGIN_SRC julia
       using SparseArrays
+      using LinearAlgebra
 
       ℓₘₐₓ = 5
       nᵣ = 10
@@ -664,6 +665,25 @@
 
       @test_throws ErrorException materialize!(z2d, ξ, L2d, r, r)
       @test_throws DimensionMismatch materialize!(z2d, ζ, L3d, r, r)
+
+      tmp2d = spzeros(N2d,N2d);
+      tmp3d = spzeros(N3d,N3d);
+
+      𝔞 = ℓ -> (ℓ+1)*I
+      𝔟 = ℓ -> -ℓ*I
+
+      materialize!(tmp2d, ζ, L2d, 𝔞, 𝔟);
+      @test ishermitian(-im*tmp2d)
+
+      materialize!(tmp3d, ζ, L3d, 𝔞, 𝔟);
+      @test ishermitian(-im*tmp3d)
+      materialize!(tmp3d, ξ, L3d, 𝔞, 𝔟);
+      @test ishermitian(-im*tmp3d)
+      materialize!(tmp3d, ξ, L3d, 𝔞, 𝔟);
+      @test ishermitian(-im*tmp3d)
+      materialize!(tmp3d, ξ, L3d, 𝔞, 𝔟);
+      @test ishermitian(-im*tmp3d)
+
       nothing
     #+END_SRC
 
