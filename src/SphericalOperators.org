@@ -151,9 +151,12 @@
         end
     end
 
+    pwindex(L::SphericalBasis2d, ℓ::Integer, m::Integer=L.m) = nopws(L,ℓ-1)
+    pwindex(L::SphericalBasis3d, ℓ::Integer, m::Integer=L.m) = (nopws(L,ℓ-1) + min(ℓ,L.mₘₐₓ) + m)
+
     size(L::AbstractSphericalBasis) = (nopws(L,L.ℓₘₐₓ),L.nᵣ)
 
-    export AbstractSphericalBasis, SphericalBasis2d, SphericalBasis3d, nopws
+    export AbstractSphericalBasis, SphericalBasis2d, SphericalBasis3d, nopws, pwindex
   #+END_SRC
 
   #+RESULTS:
@@ -408,12 +411,10 @@
     abstract type Ordering end
     struct LexicalOrdering <: Ordering end
 
-    # Lexical ordering for the 2d case
-    ord(L::SphericalBasis2d,::Type{LexicalOrdering},ℓ,r) = nopws(L,ℓ-1)*L.nᵣ .+ r
-    ord(L::SphericalBasis2d,::Type{LexicalOrdering},ℓ,m,r) = nopws(L,ℓ-1)*L.nᵣ .+ r
+    ord(L::AbstractSphericalBasis,::Type{LexicalOrdering},ℓ,m,r) = pwindex(L,ℓ,m)*L.nᵣ .+ r
 
-    # Lexical ordering for the 3d case
-    ord(L::SphericalBasis3d,::Type{LexicalOrdering},ℓ,m,r) = (nopws(L,ℓ-1) + min(ℓ,L.mₘₐₓ) + m)*L.nᵣ .+ r
+    # Lexical ordering for the 2d case
+    ord(L::SphericalBasis2d,::Type{LexicalOrdering},ℓ,r) = pwindex(L,ℓ)*L.nᵣ .+ r
   #+END_SRC
 
   #+RESULTS:
