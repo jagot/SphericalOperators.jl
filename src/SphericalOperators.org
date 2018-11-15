@@ -288,7 +288,7 @@
          ℓₘₐₓ = spectroscopic_label(L.ℓₘₐₓ)
          nℓ = L.ℓₘₐₓ - L.ℓₘᵢₙ + 1
 
-         print("SphericalBasis2d(ℓ ∈ $(ℓₘᵢₙ):$(ℓₘₐₓ) = $(nℓ) channels")
+         print("SphericalBasis3d(ℓ ∈ $(ℓₘᵢₙ):$(ℓₘₐₓ) = $(nℓ) channels")
          if L.mₘₐₓ < L.ℓₘₐₓ
              print(", mₘₐₓ = $(L.mₘₐₓ)")
          end
@@ -726,6 +726,132 @@
 
      #+RESULTS:
      : nothing
+
+** Invariant sets
+   Given a spherical basis and a dipole stencil, generate all
+   invariant sets, i.e. those that can be exponentiated separately
+   without considering the other partial waves.
+
+   It is assumed that the stencil describes a Hermitian operator,
+   i.e. if pw couples to pw′, the symmetric coupling element is
+   assumed to be the conjugated value.
+   #+BEGIN_SRC julia
+     const Coupling = Pair{Tuple{Tuple{Integer,Integer},Tuple{Integer,Integer}},Real}
+     function invariant_sets(L::AbstractSphericalBasis,
+                             stencil::DipoleStencil,
+                             𝔞::Function, 𝔟::Function)
+         pws = eachℓm(L)
+         sets = Vector{Coupling}[]
+         exprs = map(stencil.exprs) do (coords,expr)
+             L isa SphericalBasis2d && coords[2] != 0 && error("SphericalBasis2d cannot materialize operators that do not conserve m")
+             coords => eval(expr)
+         end
+         function traversepws(set, pw)
+             ℓ,m = pw
+             for (coords,e) in exprs
+                 ℓ′ = ℓ + coords[1]
+                 m′ = m + coords[2]
+                 pw′ = ℓ′,m′
+                 i = findfirst(isequal(pw′), pws)
+                 if i != nothing
+                     v = e(ℓ,m,𝔞,𝔟)
+                     v == 0 && continue
+                     push!(set, (pw,pw′) => v)
+                     deleteat!(pws, i)
+                     traversepws(set, pw′)
+                 end
+             end
+         end
+         while !isempty(pws)
+             pw = first(pws)
+             deleteat!(pws, 1)
+             set = Coupling[]
+             traversepws(set, pw)
+             !isempty(set) && push!(sets, set)
+         end
+         sets
+     end
+
+     export invariant_sets
+   #+END_SRC
+
+*** TEST Invariant sets
+    #+BEGIN_SRC julia
+      function test_is_invariant(sets)
+          pws = first.(first.(sets))
+          for i in eachindex(pws)
+              other_pws = vcat([[pws[j]...] for j in vcat(1:i-1,i+1:length(sets))]...)
+              @test isempty([pws[i]...] ∩ other_pws)
+          end
+      end
+
+      function test_set_coverage(L::AbstractSphericalBasis, op::SphericalOperators.DipoleStencil, setss...)
+          # Ensure that all partial waves in L coupled by op are present in
+          # at least one of the invariant sets generated.
+          coords = map(first, op.exprs)
+          pws = filter(eachℓm(L)) do ℓm
+              ℓ,m = ℓm
+              map(coords) do co
+                  ℓ′ = ℓ + co[1]
+                  m′ = m + co[2]
+                  ℓ′ ∈ eachℓ(L) && m′ ∈ eachm(L,ℓ′) && return true
+                  false
+              end |> any
+          end
+          set_pws = []
+          for sets in setss
+              for set in sets
+                  append!(set_pws, vcat([[pw...] for pw in first.(first.(sets))]...))
+              end
+          end
+          @test sort(pws) == sort(unique(set_pws))
+      end
+
+      L2d = SphericalBasis2d(5,1)
+
+      # If no splitting is made, there is only one invariant set containing
+      # all partial waves.
+      sets = invariant_sets(L2d, SphericalOperators.ζ, ℓ -> 1, ℓ -> 1)
+      @test length(sets) == 1
+      @test length(sets[1]) == size(L2d,1)-1
+
+      setse = invariant_sets(L2d, SphericalOperators.ζ, ℓ -> iseven(ℓ), ℓ -> isodd(ℓ))
+      setso = invariant_sets(L2d, SphericalOperators.ζ, ℓ -> isodd(ℓ), ℓ -> iseven(ℓ))
+      @test length(setse) + length(setso) == size(L2d,1)-1
+      test_set_coverage(L2d, SphericalOperators.ζ, setse, setso)
+
+      for set in setse
+          @test length(set) == 1
+      end
+      test_is_invariant(setse)
+      for set in setso
+          @test length(set) == 1
+      end
+      test_is_invariant(setso)
+
+      @test_throws ErrorException invariant_sets(L2d, SphericalOperators.ξ, ℓ -> 1, ℓ -> 1)
+      @test_throws ErrorException invariant_sets(L2d, SphericalOperators.ξ⁺, ℓ -> 1, ℓ -> 1)
+      @test_throws ErrorException invariant_sets(L2d, SphericalOperators.ξ⁻, ℓ -> 1, ℓ -> 1)
+
+      L3d = SphericalBasis3d(5,1)
+
+      for op in [SphericalOperators.ζ, SphericalOperators.ξ⁺, SphericalOperators.ξ⁻]
+          setse = invariant_sets(L3d, op, ℓ -> iseven(ℓ), ℓ -> isodd(ℓ))
+          setso = invariant_sets(L3d, op, ℓ -> isodd(ℓ), ℓ -> iseven(ℓ))
+          # @test length(setse) + length(setso) == size(L3d,1)-1
+          test_set_coverage(L3d, op, setse, setso)
+
+          for set in setse
+              @test length(set) == 1
+          end
+          test_is_invariant(setse)
+          for set in setso
+              @test length(set) == 1
+          end
+          test_is_invariant(setso)
+      end
+    #+END_SRC
+
 
 * LaTeX config                                                     :noexport:
   #+LATEX_HEADER: \renewcommand{\vec}[1]{\mathbf{#1}}
