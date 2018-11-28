@@ -101,12 +101,12 @@
 
     size(L::AbstractSphericalBasis,i::Integer) = size(L)[i]
 
-    struct SphericalBasis2d <: AbstractSphericalBasis
-        ℓₘᵢₙ::Integer
-        ℓₘₐₓ::Integer
-        nᵣ::Integer
-        m::Integer
-        function SphericalBasis2d(ℓₘₐₓ::Integer, nᵣ::Integer; m::Integer=0, ℓₘᵢₙ::Integer=m)
+    struct SphericalBasis2d{I<:Integer} <: AbstractSphericalBasis
+        ℓₘᵢₙ::I
+        ℓₘₐₓ::I
+        nᵣ::I
+        m::I
+        function SphericalBasis2d(ℓₘₐₓ::I, nᵣ::I; m::I=0, ℓₘᵢₙ::I=m) where {I<:Integer}
             @assert ℓₘᵢₙ ≥ 0
             @assert ℓₘₐₓ ≥ ℓₘᵢₙ
             @assert abs(m) ≤ ℓₘₐₓ
@@ -118,7 +118,7 @@
                 @printf("Warning: ℓₘᵢₙ = %i is not reachable when starting in m = %i, when m is conserved. Truncating.\n",
                         ℓₘᵢₙ, m)
             end
-            new(ℓₘᵢₙ, ℓₘₐₓ, nᵣ, m)
+            new{I}(ℓₘᵢₙ, ℓₘₐₓ, nᵣ, m)
         end
     end
 
@@ -127,23 +127,23 @@
 
     Returns how many partial waves ∈ [L.ℓₘᵢₙ,ℓ] are present in L.
     """
-    nopws(L::SphericalBasis2d, ℓ::Integer=L.ℓₘₐₓ) = ℓ - L.ℓₘᵢₙ + 1
+    nopws(L::SphericalBasis2d{I}, ℓ::I=L.ℓₘₐₓ) where {I<:Integer} = ℓ - L.ℓₘᵢₙ + 1
 
-    struct SphericalBasis3d <: AbstractSphericalBasis
-        ℓₘᵢₙ::Integer
-        ℓₘₐₓ::Integer
-        mₘₐₓ::Integer
-        nᵣ::Integer
-        function SphericalBasis3d(ℓₘₐₓ::Integer, nᵣ::Integer; ℓₘᵢₙ::Integer=0, mₘₐₓ::Integer=ℓₘₐₓ)
+    struct SphericalBasis3d{I<:Integer} <: AbstractSphericalBasis
+        ℓₘᵢₙ::I
+        ℓₘₐₓ::I
+        mₘₐₓ::I
+        nᵣ::I
+        function SphericalBasis3d(ℓₘₐₓ::I, nᵣ::I; ℓₘᵢₙ::I=0, mₘₐₓ::I=ℓₘₐₓ) where {I<:Integer}
             @assert ℓₘᵢₙ ≥ 0
             @assert ℓₘₐₓ ≥ ℓₘᵢₙ
             @assert mₘₐₓ ∈ 0:ℓₘₐₓ
             @assert nᵣ > 0
-            new(ℓₘᵢₙ, ℓₘₐₓ, mₘₐₓ, nᵣ)
+            new{I}(ℓₘᵢₙ, ℓₘₐₓ, mₘₐₓ, nᵣ)
         end
     end
 
-    function nopws(L::SphericalBasis3d, ℓ::Integer=L.ℓₘₐₓ)
+    function nopws(L::SphericalBasis3d{I}, ℓ::I=L.ℓₘₐₓ) where {I<:Integer}
         if ℓ > L.mₘₐₓ
             nopws(L, L.mₘₐₓ) + (ℓ-L.mₘₐₓ)*(2L.mₘₐₓ+1)
         else
@@ -151,8 +151,8 @@
         end
     end
 
-    pwindex(L::SphericalBasis2d, ℓ::Integer, m::Integer=L.m) = nopws(L,ℓ-1)
-    pwindex(L::SphericalBasis3d, ℓ::Integer, m::Integer=L.m) = (nopws(L,ℓ-1) + min(ℓ,L.mₘₐₓ) + m)
+    pwindex(L::SphericalBasis2d{I}, ℓ::I, m::I=L.m) where {I<:Integer} = nopws(L,ℓ-1)
+    pwindex(L::SphericalBasis3d{I}, ℓ::I, m::I=L.m) where {I<:Integer} = (nopws(L,ℓ-1) + min(ℓ,L.mₘₐₓ) + m)
 
     size(L::AbstractSphericalBasis) = (nopws(L,L.ℓₘₐₓ),L.nᵣ)
 
@@ -737,12 +737,14 @@
    i.e. if pw couples to pw′, the symmetric coupling element is
    assumed to be the conjugated value.
    #+BEGIN_SRC julia
-     const Coupling = Pair{Tuple{Tuple{Integer,Integer},Tuple{Integer,Integer}},Real}
+     const Coupling{I<:Integer,R<:Real} = Pair{Tuple{Tuple{I,I},Tuple{I,I}},R}
+
      function invariant_sets(L::AbstractSphericalBasis,
                              stencil::DipoleStencil,
-                             𝔞::Function, 𝔟::Function)
+                             𝔞::Function, 𝔟::Function,
+                             ::Type{R}=Float64) where {R<:Real}
          pws = eachℓm(L)
-         sets = Vector{Coupling}[]
+         sets = Vector{Coupling{Int,R}}[]
          exprs = map(stencil.exprs) do (coords,expr)
              L isa SphericalBasis2d && coords[2] != 0 && error("SphericalBasis2d cannot materialize operators that do not conserve m")
              coords => eval(expr)
@@ -766,7 +768,7 @@
          while !isempty(pws)
              pw = first(pws)
              deleteat!(pws, 1)
-             set = Coupling[]
+             set = Coupling{Int,R}[]
              traversepws(set, pw)
              !isempty(set) && push!(sets, set)
          end
@@ -852,7 +854,6 @@
           test_is_invariant(setso)
       end
     #+END_SRC
-
 
 * LaTeX config                                                     :noexport:
   #+LATEX_HEADER: \renewcommand{\vec}[1]{\mathbf{#1}}
